@@ -15,23 +15,44 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{data: string, leitura: string}>({ data: '', leitura: '' });
 
+  // 1. Ordenação Cronológica (Ascendente) para Cálculos Corretos
   const sortedReadings = useMemo(() => 
     [...readings].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()),
   [readings]);
 
-  const historyData = useMemo(() => {
+  // 2. Pré-cálculo dos valores (Consumo e Custo) mantendo ordem cronológica
+  const calculatedHistory = useMemo(() => {
     return sortedReadings.map((reading, index) => {
-      const consumption = index === 0 ? 0 : calcularConsumoEntreLeituras(sortedReadings[index-1].leitura, reading.leitura);
-      const cost = calcularCustoReal(consumption, tariffs).total;
-      
-      return {
-        ...reading,
-        consumption,
-        cost,
-        displayDate: new Date(reading.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-      };
-    }).slice(1); // Remove first reading as it has no consumption context relative to a previous one
+        const isInitial = index === 0;
+        // Consumo depende da leitura anterior na lista ordenada cronologicamente
+        const consumption = isInitial 
+            ? 0 
+            : calcularConsumoEntreLeituras(sortedReadings[index-1].leitura, reading.leitura);
+        
+        const cost = isInitial
+            ? 0
+            : calcularCustoReal(consumption, tariffs).total;
+
+        return {
+            ...reading,
+            consumption,
+            cost,
+            isInitial,
+            displayDate: new Date(reading.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            fullDate: new Date(reading.data).toLocaleDateString('pt-BR')
+        };
+    });
   }, [sortedReadings, tariffs]);
+
+  // 3. Dados para Gráficos (Removemos o inicial pois não tem consumo, mantemos ordem cronológica)
+  const chartData = useMemo(() => {
+    return calculatedHistory.filter(r => !r.isInitial);
+  }, [calculatedHistory]);
+
+  // 4. Dados para Tabela (Invertemos para mostrar Mais Recente -> Mais Antigo)
+  const tableData = useMemo(() => {
+      return [...calculatedHistory].reverse();
+  }, [calculatedHistory]);
 
   const handleEditClick = (reading: Reading) => {
     setEditingId(reading.id);
@@ -96,7 +117,7 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
             </h3>
             <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={historyData}>
+                    <AreaChart data={chartData}>
                         <defs>
                             <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
@@ -124,7 +145,7 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
             </h3>
             <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={historyData}>
+                    <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                         <XAxis dataKey="displayDate" stroke="#94a3b8" tick={{fontSize: 12}} />
                         <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
@@ -156,20 +177,11 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                    {sortedReadings.map((reading, index) => {
-                        const isEditing = editingId === reading.id;
-
-                        // Calculate consumption relative to previous reading in the sorted list
-                        // If it's the first reading, there is no consumption
-                        const consumption = index > 0 
-                            ? calcularConsumoEntreLeituras(sortedReadings[index-1].leitura, reading.leitura) 
-                            : 0;
-                        const cost = index > 0
-                            ? calcularCustoReal(consumption, tariffs).total
-                            : 0;
+                    {tableData.map((item) => {
+                        const isEditing = editingId === item.id;
 
                         return (
-                            <tr key={reading.id} className="hover:bg-slate-50 transition-colors">
+                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                 <td className="px-6 py-4 font-medium text-slate-800">
                                     {isEditing ? (
                                         <input 
@@ -179,7 +191,7 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
                                             className="border border-slate-300 rounded px-2 py-1 w-full max-w-[140px] focus:ring-2 focus:ring-indigo-500 outline-none"
                                         />
                                     ) : (
-                                        new Date(reading.data).toLocaleDateString('pt-BR')
+                                        item.fullDate
                                     )}
                                 </td>
                                 <td className="px-6 py-4">
@@ -192,21 +204,21 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
                                             className="border border-slate-300 rounded px-2 py-1 w-full max-w-[100px] focus:ring-2 focus:ring-indigo-500 outline-none"
                                         />
                                     ) : (
-                                        formatNumber(reading.leitura)
+                                        formatNumber(item.leitura)
                                     )}
                                 </td>
                                 <td className="px-6 py-4">
-                                    {index === 0 ? (
+                                    {item.isInitial ? (
                                         <span className="text-slate-400 italic">Inicial</span>
                                     ) : (
-                                        <span className="font-semibold text-blue-600">+{consumption} kWh</span>
+                                        <span className="font-semibold text-blue-600">+{item.consumption} kWh</span>
                                     )}
                                 </td>
                                 <td className="px-6 py-4">
-                                     {index === 0 ? (
+                                     {item.isInitial ? (
                                         <span className="text-slate-400 italic">-</span>
                                     ) : (
-                                        <span className="font-semibold text-emerald-600">{formatCurrency(cost)}</span>
+                                        <span className="font-semibold text-emerald-600">{formatCurrency(item.cost)}</span>
                                     )}
                                 </td>
                                 <td className="px-6 py-4 text-right">
@@ -231,14 +243,14 @@ export const History: React.FC<HistoryProps> = ({ readings, tariffs, onDelete, o
                                         ) : (
                                             <>
                                                 <button 
-                                                    onClick={() => handleEditClick(reading)}
+                                                    onClick={() => handleEditClick(item)}
                                                     className="text-indigo-400 hover:text-indigo-600 transition-colors p-2 rounded-full hover:bg-indigo-50"
                                                     title="Editar leitura"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
                                                 <button 
-                                                    onClick={() => onDelete(reading.id)}
+                                                    onClick={() => onDelete(item.id)}
                                                     className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-full hover:bg-red-50"
                                                     title="Excluir leitura"
                                                 >
