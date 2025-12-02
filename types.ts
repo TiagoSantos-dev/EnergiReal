@@ -16,8 +16,16 @@ export interface TariffConfig {
   bandeira: {
     tipo: string;
     valorPorKwh: number;
+    bandeira2?: {
+      ativa: boolean;
+      tipo: string;
+      valor: number;
+    };
   };
-  iluminacaoPublica: number;
+  iluminacaoPublica: {
+    tipo: 'fixo' | 'percentual'; // 'percentual' aqui age como multiplicador por kWh conforme pedido
+    valor: number;
+  };
 }
 
 export interface CostBreakdown {

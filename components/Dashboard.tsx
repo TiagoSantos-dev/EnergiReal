@@ -45,7 +45,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('current');
 
   // 1. Processar todas as leituras para gerar histórico de consumo completo
-  // Isso é feito ANTES de filtrar, pois o consumo de um mês pode depender da última leitura do mês anterior.
   const fullHistory = useMemo(() => {
     const sorted = [...readings].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
     
@@ -60,7 +59,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
         const prevDate = new Date(prev.data);
         const days = (currentDate.getTime() - prevDate.getTime()) / (1000 * 3600 * 24);
         
-        // Ajuste de fuso horário simples para garantir que o mês fique correto (YYYY-MM)
         const monthKey = current.data.substring(0, 7); 
 
         history.push({
@@ -74,13 +72,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     return history;
   }, [readings]);
 
-  // 2. Extrair meses disponíveis para o filtro
+  // 2. Extrair meses disponíveis
   const availableMonths = useMemo(() => {
     const months = new Set(fullHistory.map(h => h.monthKey));
     return Array.from(months).sort().reverse();
   }, [fullHistory]);
 
-  // 3. Definir seleção inicial (Mês atual ou último disponível)
+  // 3. Seleção inicial
   useEffect(() => {
     if (selectedMonth === 'current' && availableMonths.length > 0) {
         const now = new Date().toISOString().substring(0, 7);
@@ -92,7 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     }
   }, [availableMonths, selectedMonth]);
 
-  // 4. Filtrar dados baseados na seleção
+  // 4. Filtrar dados
   const filteredData = useMemo(() => {
     if (selectedMonth === 'all' || selectedMonth === 'current') return fullHistory;
     return fullHistory.filter(h => h.monthKey === selectedMonth);
@@ -100,19 +98,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
 
   // 5. Calcular KPIs
   const stats = useMemo(() => {
-    // Se não houver dados filtrados, tentamos pegar o último dado do histórico completo para mostrar algo,
-    // ou retornamos null se realmente não houver nada.
     const sourceData = filteredData.length > 0 ? filteredData : [];
     
     if (sourceData.length === 0 && fullHistory.length === 0) return null;
     
-    // Soma total do kWh do período selecionado
     const rawTotalKwh = sourceData.reduce((acc, curr) => acc + curr.kwh, 0);
     const lastEvent = sourceData.length > 0 ? sourceData[sourceData.length - 1] : (fullHistory[fullHistory.length - 1] || null);
 
     if (!lastEvent) return null;
 
-    // Lógica para Média vs Total
     let displayKwh = rawTotalKwh;
     let labelConsumption = 'Neste Mês';
     let labelCost = 'Custo Real';
@@ -127,17 +121,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
             labelConsumption = 'Acumulado Total';
         }
     } else {
-        // Se for mês específico (passado ou atual)
         labelConsumption = 'Consumo Total';
     }
 
-    // Calcula os custos baseados no kWh de exibição (seja total do mês ou média de todos)
-    // Isso garante que a iluminação pública e as tarifas sejam aplicadas sobre o valor médio corretamente
     const costs = calcularCustoReal(displayKwh, tariffs);
 
-    // Lógica de Projeção / Card Lateral
     let projectionInfo = {
-        type: 'Fechado', // 'Projeção', 'Média', 'Fechado'
+        type: 'Fechado',
         kwh: displayKwh,
         cost: costs.total,
         label: 'Total do Período'
@@ -146,7 +136,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     const currentMonthKey = new Date().toISOString().substring(0, 7);
 
     if (selectedMonth === 'all') {
-        // No modo "Todos", o card lateral reforça a média
         projectionInfo = {
             type: 'Média Mensal',
             kwh: displayKwh,
@@ -154,9 +143,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
             label: 'Estimativa Típica'
         };
     } else if (selectedMonth === currentMonthKey && filteredData.length > 0) {
-        // Modo "Mês Atual": Calcular Projeção
         const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-        // Soma dos dias cobertos pelas leituras deste mês
         const daysCovered = filteredData.reduce((acc, curr) => acc + curr.daysSinceLast, 0);
         
         if (daysCovered > 0) {
@@ -172,7 +159,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
             };
         }
     }
-    // Se for mês passado, mantém "Fechado" (total real)
+
+    // Texto da Bandeira
+    let bandeiraText = tariffs.bandeira.tipo;
+    if (tariffs.bandeira.bandeira2?.ativa) {
+        bandeiraText = `${tariffs.bandeira.tipo} + ${tariffs.bandeira.bandeira2.tipo}`;
+    }
 
     return {
         displayKwh,
@@ -181,13 +173,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
         lastDate: lastEvent.date,
         projection: projectionInfo,
         labelConsumption,
-        labelCost
+        labelCost,
+        bandeiraText
     };
   }, [filteredData, fullHistory, tariffs, selectedMonth]);
 
-  // Dados para Gráficos - AGORA USANDO FULLHISTORY PARA O GRÁFICO DE LINHA
   const chartData = useMemo(() => {
-      // Usamos sempre o fullHistory para o gráfico de evolução
       return fullHistory.map(d => ({
           name: d.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
           kwh: d.kwh,
@@ -205,14 +196,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     ];
   }, [stats]);
 
-  // Formatar label do mês para o dropdown
   const formatMonthLabel = (key: string) => {
       const [year, month] = key.split('-');
       const date = new Date(parseInt(year), parseInt(month) - 1, 1);
       return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   };
-
-  // -- Renderização --
 
   if (readings.length === 0) {
     return (
@@ -264,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
         <>
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Card: Última Leitura (ou Leitura Final do Período) */}
+                {/* Card: Última Leitura */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
                 <div className="flex justify-between items-start mb-4">
                     <div className="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors">
@@ -284,7 +272,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                 </div>
                 </div>
 
-                {/* Card: Consumo (Total ou Média) */}
+                {/* Card: Consumo */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
                 <div className="flex justify-between items-start mb-4">
                     <div className="p-2 bg-emerald-50 rounded-lg group-hover:bg-emerald-100 transition-colors">
@@ -302,14 +290,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                 </div>
                 </div>
 
-                {/* Card: Custo (Total ou Média) */}
+                {/* Card: Custo */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
                 <div className="flex justify-between items-start mb-4">
                     <div className="p-2 bg-amber-50 rounded-lg group-hover:bg-amber-100 transition-colors">
                         <DollarSign className="w-5 h-5 text-amber-600" />
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-1 bg-amber-50 text-amber-600 rounded-full border border-amber-100">
-                        {tariffs.bandeira.tipo}
+                    <span className="text-[10px] font-bold px-2 py-1 bg-amber-50 text-amber-600 rounded-full border border-amber-100 max-w-[100px] truncate" title={stats.bandeiraText}>
+                        {stats.bandeiraText}
                     </span>
                 </div>
                 <div>
@@ -323,7 +311,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                 </div>
                 </div>
 
-                {/* Card: Projeção / Média / Fechamento */}
+                {/* Card: Projeção */}
                 <div className={`p-5 rounded-2xl shadow-lg relative overflow-hidden group text-white ${
                     stats.projection.type === 'Projeção' 
                         ? 'bg-gradient-to-br from-indigo-600 to-violet-700 shadow-indigo-200' 
@@ -355,7 +343,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* Left: Trend Chart (ALWAYS FULL HISTORY) */}
+                {/* Left: Trend Chart */}
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-bold text-slate-800">Evolução do Consumo</h3>
@@ -415,7 +403,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                     </div>
                 </div>
 
-                {/* Right: Cost Breakdown (FILTERED) */}
+                {/* Right: Cost Breakdown */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
                     <h3 className="text-lg font-bold text-slate-800 mb-2">Composição da Fatura</h3>
                     <p className="text-xs text-slate-500 mb-6">Detalhamento proporcional do período selecionado.</p>

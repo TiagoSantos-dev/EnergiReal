@@ -11,9 +11,17 @@ export const DEFAULT_TARIFFS: TariffConfig = {
   },
   bandeira: {
     tipo: 'Verde',
-    valorPorKwh: 0.00
+    valorPorKwh: 0.00,
+    bandeira2: {
+      ativa: false,
+      tipo: 'Amarela',
+      valor: 0.01885
+    }
   },
-  iluminacaoPublica: 15.00
+  iluminacaoPublica: {
+    tipo: 'fixo',
+    valor: 15.00
+  }
 };
 
 export const MOCK_READINGS = [

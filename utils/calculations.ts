@@ -8,15 +8,39 @@ export function calcularConsumoEntreLeituras(leituraAnterior: number | null, lei
 export function calcularCustoReal(kwh: number, tarifas: TariffConfig): CostBreakdown {
     const custoTUSD = kwh * tarifas.tusd.unitarioComTributos;
     const custoTE   = kwh * tarifas.te.unitarioComTributos;
-    const custoBandeira = kwh * tarifas.bandeira.valorPorKwh;
-    const iluminacao = tarifas.iluminacaoPublica;
+    
+    // Bandeira 1
+    const custoBandeira1 = kwh * tarifas.bandeira.valorPorKwh;
+    
+    // Bandeira 2 (se ativa)
+    let custoBandeira2 = 0;
+    if (tarifas.bandeira.bandeira2?.ativa) {
+        custoBandeira2 = kwh * tarifas.bandeira.bandeira2.valor;
+    }
+    
+    const custoBandeiraTotal = custoBandeira1 + custoBandeira2;
 
-    const total = custoTUSD + custoTE + custoBandeira + iluminacao;
+    // Iluminação Pública (Fixo ou Variável/Percentual)
+    let iluminacao = 0;
+    
+    // Verificação de segurança para formato legado (se por acaso vier number direto)
+    if (typeof tarifas.iluminacaoPublica === 'number') {
+        iluminacao = tarifas.iluminacaoPublica;
+    } else {
+        if (tarifas.iluminacaoPublica.tipo === 'percentual') {
+            // Percentual interpretado como valor * kwh (taxa variável)
+            iluminacao = tarifas.iluminacaoPublica.valor * kwh;
+        } else {
+            iluminacao = tarifas.iluminacaoPublica.valor;
+        }
+    }
+
+    const total = custoTUSD + custoTE + custoBandeiraTotal + iluminacao;
 
     return {
         custoTUSD,
         custoTE,
-        custoBandeira,
+        custoBandeira: custoBandeiraTotal,
         iluminacao,
         total
     };
@@ -30,10 +54,6 @@ export function calcularProjecao(leituras: Reading[], tarifas: TariffConfig): Pr
 
     let totalConsumido = 0;
 
-    // Only consider readings from the current month/cycle if we want strict monthly projection, 
-    // but the prompt implies a general projection based on recent history.
-    // For better accuracy, let's grab the range of the provided readings.
-    
     for (let i = 1; i < sortedReadings.length; i++) {
         const kwh = calcularConsumoEntreLeituras(
             sortedReadings[i - 1].leitura,

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { Zap, Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { supabase, updateSupabaseConfig } from '../lib/supabase';
+import { Zap, Mail, Lock, ArrowRight, Loader2, AlertCircle, Settings, X } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: () => void; // Callback opcional, pois o Auth state listener no App.tsx cuidará do fluxo
+  onLogin: () => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -12,6 +12,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
+  // Settings Modal State
+  const [showSettings, setShowSettings] = useState(false);
+  const [configUrl, setConfigUrl] = useState(localStorage.getItem('supabase_project_url') || '');
+  const [configKey, setConfigKey] = useState(localStorage.getItem('supabase_anon_key') || '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,16 +40,79 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         });
         if (error) throw error;
       }
-      // onLogin será chamado indiretamente via onAuthStateChange no App.tsx
     } catch (error: any) {
-      setErrorMsg(error.message || 'Ocorreu um erro. Tente novamente.');
+      console.error(error);
+      if (error.message && (error.message.includes('Fetch') || error.message.includes('url'))) {
+          setErrorMsg('Erro de conexão. Verifique as chaves do Supabase clicando na engrenagem no canto superior direito.');
+      } else {
+          setErrorMsg(error.message || 'Ocorreu um erro. Tente novamente.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleSaveConfig = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(configUrl && configKey) {
+          updateSupabaseConfig(configUrl, configKey);
+      }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
+      
+      {/* Config Button */}
+      <button 
+        onClick={() => setShowSettings(true)}
+        className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all z-20"
+        title="Configurar Conexão"
+      >
+          <Settings size={20} />
+      </button>
+
+      {/* Settings Modal */}
+      {showSettings && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+                  <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                      <X size={20} />
+                  </button>
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                      <Settings className="w-5 h-5" /> Configuração do Projeto
+                  </h3>
+                  <p className="text-sm text-slate-500 mb-4">
+                      Insira as chaves do seu projeto Supabase. Elas serão salvas no seu navegador.
+                  </p>
+                  <form onSubmit={handleSaveConfig} className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project URL</label>
+                          <input 
+                            type="text" 
+                            value={configUrl}
+                            onChange={(e) => setConfigUrl(e.target.value)}
+                            placeholder="https://xxx.supabase.co"
+                            className="w-full p-2 border rounded text-sm bg-slate-50"
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Anon Public Key</label>
+                          <input 
+                            type="password" 
+                            value={configKey}
+                            onChange={(e) => setConfigKey(e.target.value)}
+                            placeholder="eyJh..."
+                            className="w-full p-2 border rounded text-sm bg-slate-50"
+                          />
+                      </div>
+                      <button type="submit" className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700">
+                          Salvar e Recarregar
+                      </button>
+                  </form>
+              </div>
+          </div>
+      )}
+
       {/* Background Decoration */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-200/30 rounded-full blur-[100px]" />

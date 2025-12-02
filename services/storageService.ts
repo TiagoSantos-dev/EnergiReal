@@ -88,12 +88,32 @@ export const getTariffs = async (): Promise<TariffConfig> => {
     .eq('user_id', user.id)
     .single();
 
-  if (error && error.code !== 'PGRST116') { // PGRST116 é "nenhum resultado encontrado"
+  if (error && error.code !== 'PGRST116') {
     console.error('Erro ao buscar tarifas:', error);
   }
 
   if (data && data.tariffs) {
-    return data.tariffs as TariffConfig;
+    let t = data.tariffs as any;
+
+    // --- MIGRATION LOGIC (Runtime) ---
+    // 1. Converter Iluminação Pública antiga (number) para objeto
+    if (typeof t.iluminacaoPublica === 'number') {
+        t.iluminacaoPublica = {
+            tipo: 'fixo',
+            valor: t.iluminacaoPublica
+        };
+    }
+    // 2. Adicionar bandeira2 se não existir
+    if (!t.bandeira.bandeira2) {
+        t.bandeira.bandeira2 = {
+            ativa: false,
+            tipo: 'Amarela',
+            valor: 0.01885
+        };
+    }
+    // ---------------------------------
+
+    return t as TariffConfig;
   }
 
   return DEFAULT_TARIFFS;
