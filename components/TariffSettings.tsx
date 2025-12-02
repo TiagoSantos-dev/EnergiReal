@@ -66,23 +66,15 @@ export const TariffSettings: React.FC<TariffSettingsProps> = ({ tariffs, onSave 
         {/* TUSD Section */}
         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
             <h3 className="text-sm font-semibold text-slate-700 mb-3 border-b border-slate-200 pb-2">TUSD (Tarifa de Uso do Sistema de Distribuição)</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
                 <div>
-                    <label className="block text-xs text-slate-500 mb-1">Com Tributos (R$/kWh)</label>
+                    <label className="block text-xs text-slate-500 mb-1">Valor da Tarifa (R$/kWh)</label>
                     <input 
                         type="number" step="0.00001" 
                         value={config.tusd.unitarioComTributos}
                         onChange={(e) => handleChange('tusd', 'unitarioComTributos', e.target.value)}
                         className="w-full p-2 border rounded text-sm"
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs text-slate-500 mb-1">Sem Tributos (R$/kWh)</label>
-                    <input 
-                        type="number" step="0.00001" 
-                        value={config.tusd.unitarioSemTributos}
-                        onChange={(e) => handleChange('tusd', 'unitarioSemTributos', e.target.value)}
-                        className="w-full p-2 border rounded text-sm"
+                        placeholder="Ex: 0.45"
                     />
                 </div>
             </div>
@@ -91,23 +83,15 @@ export const TariffSettings: React.FC<TariffSettingsProps> = ({ tariffs, onSave 
         {/* TE Section */}
         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
             <h3 className="text-sm font-semibold text-slate-700 mb-3 border-b border-slate-200 pb-2">TE (Tarifa de Energia)</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
                 <div>
-                    <label className="block text-xs text-slate-500 mb-1">Com Tributos (R$/kWh)</label>
+                    <label className="block text-xs text-slate-500 mb-1">Valor da Tarifa (R$/kWh)</label>
                     <input 
                         type="number" step="0.00001" 
                         value={config.te.unitarioComTributos}
                         onChange={(e) => handleChange('te', 'unitarioComTributos', e.target.value)}
                         className="w-full p-2 border rounded text-sm"
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs text-slate-500 mb-1">Sem Tributos (R$/kWh)</label>
-                    <input 
-                        type="number" step="0.00001" 
-                        value={config.te.unitarioSemTributos}
-                        onChange={(e) => handleChange('te', 'unitarioSemTributos', e.target.value)}
-                        className="w-full p-2 border rounded text-sm"
+                        placeholder="Ex: 0.35"
                     />
                 </div>
             </div>

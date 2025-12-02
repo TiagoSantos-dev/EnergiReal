@@ -106,18 +106,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     
     if (sourceData.length === 0 && fullHistory.length === 0) return null;
     
-    // Se filteredData for vazio (ex: mês selecionado sem leituras), usamos zeros para totais
-    // mas mantemos referência de data se possível
-    const totalKwh = sourceData.reduce((acc, curr) => acc + curr.kwh, 0);
-    const costs = calcularCustoReal(totalKwh, tariffs);
+    // Soma total do kWh do período selecionado
+    const rawTotalKwh = sourceData.reduce((acc, curr) => acc + curr.kwh, 0);
     const lastEvent = sourceData.length > 0 ? sourceData[sourceData.length - 1] : (fullHistory[fullHistory.length - 1] || null);
 
     if (!lastEvent) return null;
 
-    // Lógica de Projeção / Média / Fechamento
+    // Lógica para Média vs Total
+    let displayKwh = rawTotalKwh;
+    let labelConsumption = 'Neste Mês';
+    let labelCost = 'Custo Real';
+
+    if (selectedMonth === 'all') {
+        const uniqueMonths = new Set(filteredData.map(d => d.monthKey)).size;
+        if (uniqueMonths > 0) {
+            displayKwh = rawTotalKwh / uniqueMonths;
+            labelConsumption = 'Média Mensal';
+            labelCost = 'Custo Médio';
+        } else {
+            labelConsumption = 'Acumulado Total';
+        }
+    } else {
+        // Se for mês específico (passado ou atual)
+        labelConsumption = 'Consumo Total';
+    }
+
+    // Calcula os custos baseados no kWh de exibição (seja total do mês ou média de todos)
+    // Isso garante que a iluminação pública e as tarifas sejam aplicadas sobre o valor médio corretamente
+    const costs = calcularCustoReal(displayKwh, tariffs);
+
+    // Lógica de Projeção / Card Lateral
     let projectionInfo = {
         type: 'Fechado', // 'Projeção', 'Média', 'Fechado'
-        kwh: totalKwh,
+        kwh: displayKwh,
         cost: costs.total,
         label: 'Total do Período'
     };
@@ -125,16 +146,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     const currentMonthKey = new Date().toISOString().substring(0, 7);
 
     if (selectedMonth === 'all') {
-        // Modo "Todos": Mostrar médias
-        const uniqueMonths = new Set(filteredData.map(d => d.monthKey)).size;
-        if (uniqueMonths > 0) {
-            projectionInfo = {
-                type: 'Média Mensal',
-                kwh: totalKwh / uniqueMonths,
-                cost: costs.total / uniqueMonths,
-                label: 'Média por Mês'
-            };
-        }
+        // No modo "Todos", o card lateral reforça a média
+        projectionInfo = {
+            type: 'Média Mensal',
+            kwh: displayKwh,
+            cost: costs.total,
+            label: 'Estimativa Típica'
+        };
     } else if (selectedMonth === currentMonthKey && filteredData.length > 0) {
         // Modo "Mês Atual": Calcular Projeção
         const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
@@ -142,7 +160,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
         const daysCovered = filteredData.reduce((acc, curr) => acc + curr.daysSinceLast, 0);
         
         if (daysCovered > 0) {
-            const dailyAvg = totalKwh / daysCovered;
+            const dailyAvg = rawTotalKwh / daysCovered;
             const projectedKwh = dailyAvg * daysInMonth;
             const projectedCost = calcularCustoReal(projectedKwh, tariffs).total;
             
@@ -157,11 +175,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
     // Se for mês passado, mantém "Fechado" (total real)
 
     return {
-        totalKwh,
+        displayKwh,
         costs,
         lastReading: lastEvent.reading,
         lastDate: lastEvent.date,
-        projection: projectionInfo
+        projection: projectionInfo,
+        labelConsumption,
+        labelCost
     };
   }, [filteredData, fullHistory, tariffs, selectedMonth]);
 
@@ -264,7 +284,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                 </div>
                 </div>
 
-                {/* Card: Consumo Total/Filtrado */}
+                {/* Card: Consumo (Total ou Média) */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
                 <div className="flex justify-between items-start mb-4">
                     <div className="p-2 bg-emerald-50 rounded-lg group-hover:bg-emerald-100 transition-colors">
@@ -272,17 +292,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                     </div>
                 </div>
                 <div>
-                    <p className="text-sm text-slate-500 font-medium">Consumo Filtrado</p>
+                    <p className="text-sm text-slate-500 font-medium">{stats.labelConsumption}</p>
                     <h3 className="text-2xl font-bold text-slate-800 mt-1">
-                        {formatNumber(stats.totalKwh)} <span className="text-sm font-medium text-slate-400">kWh</span>
+                        {formatNumber(stats.displayKwh)} <span className="text-sm font-medium text-slate-400">kWh</span>
                     </h3>
                     <p className="text-xs text-slate-400 mt-2">
-                        {selectedMonth === 'all' ? 'Acumulado Total' : 'Neste Mês'}
+                        {selectedMonth === 'all' ? 'Por mês (média)' : 'Neste período'}
                     </p>
                 </div>
                 </div>
 
-                {/* Card: Custo Real do Período */}
+                {/* Card: Custo (Total ou Média) */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
                 <div className="flex justify-between items-start mb-4">
                     <div className="p-2 bg-amber-50 rounded-lg group-hover:bg-amber-100 transition-colors">
@@ -293,12 +313,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                     </span>
                 </div>
                 <div>
-                    <p className="text-sm text-slate-500 font-medium">Custo Real</p>
+                    <p className="text-sm text-slate-500 font-medium">{stats.labelCost}</p>
                     <h3 className="text-2xl font-bold text-slate-800 mt-1">
                         {formatCurrency(stats.costs.total)}
                     </h3>
                     <p className="text-xs text-slate-400 mt-2">
-                        Valor calculado
+                        {selectedMonth === 'all' ? 'Valor médio mensal' : 'Valor calculado'}
                     </p>
                 </div>
                 </div>
