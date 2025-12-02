@@ -11,7 +11,6 @@ import {
   DollarSign, 
   Calendar, 
   TrendingUp, 
-  ArrowUpRight, 
   PieChart as PieIcon,
   Filter
 } from 'lucide-react';
@@ -101,11 +100,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
 
   // 5. Calcular KPIs
   const stats = useMemo(() => {
-    if (filteredData.length === 0) return null;
-
-    const totalKwh = filteredData.reduce((acc, curr) => acc + curr.kwh, 0);
+    // Se não houver dados filtrados, tentamos pegar o último dado do histórico completo para mostrar algo,
+    // ou retornamos null se realmente não houver nada.
+    const sourceData = filteredData.length > 0 ? filteredData : [];
+    
+    if (sourceData.length === 0 && fullHistory.length === 0) return null;
+    
+    // Se filteredData for vazio (ex: mês selecionado sem leituras), usamos zeros para totais
+    // mas mantemos referência de data se possível
+    const totalKwh = sourceData.reduce((acc, curr) => acc + curr.kwh, 0);
     const costs = calcularCustoReal(totalKwh, tariffs);
-    const lastEvent = filteredData[filteredData.length - 1];
+    const lastEvent = sourceData.length > 0 ? sourceData[sourceData.length - 1] : (fullHistory[fullHistory.length - 1] || null);
+
+    if (!lastEvent) return null;
 
     // Lógica de Projeção / Média / Fechamento
     let projectionInfo = {
@@ -128,7 +135,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                 label: 'Média por Mês'
             };
         }
-    } else if (selectedMonth === currentMonthKey) {
+    } else if (selectedMonth === currentMonthKey && filteredData.length > 0) {
         // Modo "Mês Atual": Calcular Projeção
         const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
         // Soma dos dias cobertos pelas leituras deste mês
@@ -156,16 +163,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
         lastDate: lastEvent.date,
         projection: projectionInfo
     };
-  }, [filteredData, tariffs, selectedMonth]);
+  }, [filteredData, fullHistory, tariffs, selectedMonth]);
 
-  // Dados para Gráficos
+  // Dados para Gráficos - AGORA USANDO FULLHISTORY PARA O GRÁFICO DE LINHA
   const chartData = useMemo(() => {
-      return filteredData.map(d => ({
-          name: d.date.toLocaleDateString('pt-BR', { day: '2-digit', month: selectedMonth === 'all' ? 'short' : undefined }),
+      // Usamos sempre o fullHistory para o gráfico de evolução
+      return fullHistory.map(d => ({
+          name: d.date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
           kwh: d.kwh,
           fullDate: d.date.toLocaleDateString('pt-BR')
       }));
-  }, [filteredData, selectedMonth]);
+  }, [fullHistory]);
 
   const compositionData = useMemo(() => {
     if (!stats) return [];
@@ -327,15 +335,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* Left: Trend Chart */}
+                {/* Left: Trend Chart (ALWAYS FULL HISTORY) */}
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-bold text-slate-800">Evolução do Consumo</h3>
-                        {selectedMonth !== 'all' && (
-                            <span className="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                                {formatMonthLabel(selectedMonth)}
-                            </span>
-                        )}
+                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                            Histórico Completo
+                        </span>
                     </div>
                     
                     <div className="flex-1 min-h-[300px]">
@@ -356,7 +362,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                                         tickLine={false} 
                                         axisLine={false} 
                                         dy={10}
-                                        interval={selectedMonth === 'all' ? 'preserveStartEnd' : 0}
+                                        interval="preserveStartEnd"
+                                        minTickGap={30}
                                     />
                                     <YAxis 
                                         stroke="#94a3b8" 
@@ -388,10 +395,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
                     </div>
                 </div>
 
-                {/* Right: Cost Breakdown */}
+                {/* Right: Cost Breakdown (FILTERED) */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
                     <h3 className="text-lg font-bold text-slate-800 mb-2">Composição da Fatura</h3>
-                    <p className="text-xs text-slate-500 mb-6">Detalhamento proporcional.</p>
+                    <p className="text-xs text-slate-500 mb-6">Detalhamento proporcional do período selecionado.</p>
 
                     <div className="h-[220px] w-full relative">
                         <ResponsiveContainer width="100%" height="100%">
@@ -446,7 +453,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ readings, tariffs }) => {
         </>
       ) : (
           <div className="text-center py-20 text-slate-400">
-              <p>Nenhuma leitura encontrada para o período selecionado.</p>
+              <p>Nenhuma leitura encontrada.</p>
           </div>
       )}
     </div>
