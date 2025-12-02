@@ -28,8 +28,10 @@ export function calcularCustoReal(kwh: number, tarifas: TariffConfig): CostBreak
         iluminacao = tarifas.iluminacaoPublica;
     } else {
         if (tarifas.iluminacaoPublica.tipo === 'percentual') {
-            // Percentual interpretado como valor * kwh (taxa variável)
-            iluminacao = tarifas.iluminacaoPublica.valor * kwh;
+            // Percentual sobre o valor total do kWh consumido (TUSD + TE + Bandeiras)
+            // Ex: Se o consumo deu R$ 100,00 e a taxa é 10%, a iluminação será R$ 10,00
+            const custoBase = custoTUSD + custoTE + custoBandeiraTotal;
+            iluminacao = custoBase * (tarifas.iluminacaoPublica.valor / 100);
         } else {
             iluminacao = tarifas.iluminacaoPublica.valor;
         }

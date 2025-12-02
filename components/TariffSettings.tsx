@@ -221,18 +221,19 @@ export const TariffSettings: React.FC<TariffSettingsProps> = ({ tariffs, onSave 
                         className="w-full p-2 border rounded text-sm bg-white focus:ring-2 focus:ring-indigo-200 outline-none"
                     >
                         <option value="fixo">Valor Fixo (R$)</option>
-                        <option value="percentual">Variável (Valor x kWh)</option>
+                        <option value="percentual">Variável (% sobre Consumo)</option>
                     </select>
                  </div>
                  <div>
                      <label className="block text-xs text-slate-500 mb-1">
-                        {config.iluminacaoPublica.tipo === 'fixo' ? 'Valor Mensal (R$)' : 'Valor Unitário (R$/kWh)'}
+                        {config.iluminacaoPublica.tipo === 'fixo' ? 'Valor Mensal (R$)' : 'Percentual (%)'}
                      </label>
                      <input 
-                            type="number" step={config.iluminacaoPublica.tipo === 'fixo' ? "0.01" : "0.00001"}
+                            type="number" step={config.iluminacaoPublica.tipo === 'fixo' ? "0.01" : "0.01"}
                             value={config.iluminacaoPublica.valor}
                             onChange={(e) => handleChange('iluminacaoPublica', 'valor', e.target.value)}
                             className="w-full p-2 border rounded text-sm text-right focus:ring-2 focus:ring-indigo-200 outline-none"
+                            placeholder={config.iluminacaoPublica.tipo === 'fixo' ? "15.00" : "10"}
                      />
                  </div>
              </div>
