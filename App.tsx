@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
 import { Reading, TariffConfig } from './types';
 import { getReadings, saveReading, getTariffs, saveTariffs, deleteReading, updateReading } from './services/storageService';
 import { Dashboard } from './components/Dashboard';
@@ -6,7 +7,8 @@ import { ReadingForm } from './components/ReadingForm';
 import { TariffSettings } from './components/TariffSettings';
 import { History } from './components/History';
 import { Login } from './components/Login';
-import { LayoutDashboard, PlusCircle, Settings, History as HistoryIcon, Zap, LogOut } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Settings, History as HistoryIcon, Zap, LogOut, Loader2 } from 'lucide-react';
+import { DEFAULT_TARIFFS } from './constants';
 
 enum Tab {
   DASHBOARD = 'dashboard',
@@ -16,54 +18,106 @@ enum Tab {
 }
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [session, setSession] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
+  
   const [readings, setReadings] = useState<Reading[]>([]);
   const [tariffs, setTariffs] = useState<TariffConfig | null>(null);
+  
+  const [loadingData, setLoadingData] = useState(false);
 
+  // 1. Gerenciamento de Sessão
   useEffect(() => {
-    // Check authentication
-    const auth = localStorage.getItem('energi_real_auth');
-    if (auth === 'true') {
-      setIsAuthenticated(true);
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
 
-    // Initial Load
-    setReadings(getReadings());
-    setTariffs(getTariffs());
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = () => {
-    localStorage.setItem('energi_real_auth', 'true');
-    setIsAuthenticated(true);
+  // 2. Busca de Dados quando a sessão existe
+  useEffect(() => {
+    if (session) {
+      loadData();
+    } else {
+      setReadings([]);
+      setTariffs(null);
+    }
+  }, [session]);
+
+  const loadData = async () => {
+    setLoadingData(true);
+    try {
+      const [fetchedReadings, fetchedTariffs] = await Promise.all([
+        getReadings(),
+        getTariffs()
+      ]);
+      setReadings(fetchedReadings);
+      setTariffs(fetchedTariffs || DEFAULT_TARIFFS);
+    } catch (error) {
+      console.error("Failed to load data", error);
+    } finally {
+      setLoadingData(false);
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('energi_real_auth');
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setActiveTab(Tab.DASHBOARD);
   };
 
-  const handleSaveReading = (reading: Reading) => {
-    const updated = saveReading(reading);
-    setReadings(updated);
-    setActiveTab(Tab.DASHBOARD);
+  const handleSaveReading = async (reading: Reading) => {
+    try {
+      // Remove ID for creation, Supabase generates it
+      const { id, ...readingData } = reading;
+      const saved = await saveReading(readingData);
+      if (saved) {
+        setReadings(prev => [...prev, saved]);
+        setActiveTab(Tab.DASHBOARD);
+      }
+    } catch (e) {
+      alert('Erro ao salvar leitura');
+    }
   };
 
-  const handleUpdateReading = (reading: Reading) => {
-    const updated = updateReading(reading);
-    setReadings(updated);
+  const handleUpdateReading = async (reading: Reading) => {
+    try {
+      const updated = await updateReading(reading);
+      if (updated) {
+        setReadings(prev => prev.map(r => r.id === updated.id ? updated : r));
+      }
+    } catch (e) {
+      alert('Erro ao atualizar leitura');
+    }
   };
 
-  const handleSaveTariffs = (config: TariffConfig) => {
-    const updated = saveTariffs(config);
-    setTariffs(updated);
+  const handleSaveTariffs = async (config: TariffConfig) => {
+    try {
+      const saved = await saveTariffs(config);
+      setTariffs(saved);
+    } catch (e) {
+      alert('Erro ao salvar tarifas');
+    }
   };
 
-  const handleDeleteReading = (id: string) => {
+  const handleDeleteReading = async (id: string) => {
       if(window.confirm('Tem certeza que deseja excluir esta leitura?')) {
-        const updated = deleteReading(id);
-        setReadings(updated);
+        try {
+          await deleteReading(id);
+          setReadings(prev => prev.filter(r => r.id !== id));
+        } catch (e) {
+          alert('Erro ao excluir leitura');
+        }
       }
   };
 
@@ -72,24 +126,33 @@ const App: React.FC = () => {
     return [...readings].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()).pop();
   };
 
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-indigo-600"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   }
 
-  if (!tariffs) return <div className="flex h-screen items-center justify-center text-slate-500">Carregando...</div>;
+  if (!session) {
+    return <Login onLogin={() => {}} />;
+  }
 
   const renderContent = () => {
+    if (loadingData && !tariffs) {
+      return <div className="flex h-[50vh] items-center justify-center text-slate-400"><Loader2 className="w-6 h-6 animate-spin mr-2"/> Carregando dados...</div>;
+    }
+
+    // Fallback if tariffs failed to load but we aren't loading anymore
+    const safeTariffs = tariffs || DEFAULT_TARIFFS;
+
     switch (activeTab) {
       case Tab.DASHBOARD:
-        return <Dashboard readings={readings} tariffs={tariffs} />;
+        return <Dashboard readings={readings} tariffs={safeTariffs} />;
       case Tab.ADD:
-        return <ReadingForm onSave={handleSaveReading} lastReading={getLastReading()} tariffs={tariffs} />;
+        return <ReadingForm onSave={handleSaveReading} lastReading={getLastReading()} tariffs={safeTariffs} />;
       case Tab.HISTORY:
-        return <History readings={readings} tariffs={tariffs} onDelete={handleDeleteReading} onUpdate={handleUpdateReading} />;
+        return <History readings={readings} tariffs={safeTariffs} onDelete={handleDeleteReading} onUpdate={handleUpdateReading} />;
       case Tab.SETTINGS:
-        return <TariffSettings tariffs={tariffs} onSave={handleSaveTariffs} />;
+        return <TariffSettings tariffs={safeTariffs} onSave={handleSaveTariffs} />;
       default:
-        return <Dashboard readings={readings} tariffs={tariffs} />;
+        return <Dashboard readings={readings} tariffs={safeTariffs} />;
     }
   };
 
@@ -138,7 +201,8 @@ const App: React.FC = () => {
             </div>
 
             {/* Logout Button (Desktop & Mobile header) */}
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
+                <span className="hidden sm:block text-xs text-slate-400 max-w-[100px] truncate">{session.user.email}</span>
                 <button 
                   onClick={handleLogout}
                   className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all"

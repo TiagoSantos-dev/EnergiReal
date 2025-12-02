@@ -1,41 +1,121 @@
+import { supabase } from '../lib/supabase';
 import { Reading, TariffConfig } from '../types';
 import { DEFAULT_TARIFFS } from '../constants';
 
-const KEYS = {
-  READINGS: 'energi_real_readings',
-  TARIFFS: 'energi_real_tariffs',
+// --- Leituras (Readings) ---
+
+export const getReadings = async (): Promise<Reading[]> => {
+  const { data, error } = await supabase
+    .from('readings')
+    .select('*')
+    .order('data', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao buscar leituras:', error);
+    return [];
+  }
+
+  // Converter campos numéricos que podem vir como string do banco
+  return (data || []).map((r: any) => ({
+    ...r,
+    leitura: Number(r.leitura)
+  }));
 };
 
-export const getReadings = (): Reading[] => {
-  const data = localStorage.getItem(KEYS.READINGS);
-  return data ? JSON.parse(data) : [];
+export const saveReading = async (reading: Omit<Reading, 'id'>): Promise<Reading | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) throw new Error('Usuário não autenticado');
+
+  const { data, error } = await supabase
+    .from('readings')
+    .insert([{
+      user_id: user.id,
+      data: reading.data,
+      leitura: reading.leitura
+    }])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao salvar leitura:', error);
+    throw error;
+  }
+
+  return { ...data, leitura: Number(data.leitura) };
 };
 
-export const saveReading = (reading: Reading): Reading[] => {
-  const readings = getReadings();
-  const newReadings = [...readings, reading];
-  localStorage.setItem(KEYS.READINGS, JSON.stringify(newReadings));
-  return newReadings;
+export const updateReading = async (updatedReading: Reading): Promise<Reading | null> => {
+  const { data, error } = await supabase
+    .from('readings')
+    .update({ 
+      data: updatedReading.data, 
+      leitura: updatedReading.leitura 
+    })
+    .eq('id', updatedReading.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Erro ao atualizar leitura:', error);
+    throw error;
+  }
+
+  return { ...data, leitura: Number(data.leitura) };
 };
 
-export const updateReading = (updatedReading: Reading): Reading[] => {
-  const readings = getReadings().map(r => r.id === updatedReading.id ? updatedReading : r);
-  localStorage.setItem(KEYS.READINGS, JSON.stringify(readings));
-  return readings;
+export const deleteReading = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('readings')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Erro ao deletar leitura:', error);
+    throw error;
+  }
 };
 
-export const deleteReading = (id: string): Reading[] => {
-  const readings = getReadings().filter(r => r.id !== id);
-  localStorage.setItem(KEYS.READINGS, JSON.stringify(readings));
-  return readings;
+// --- Tarifas (Tariffs) ---
+
+export const getTariffs = async (): Promise<TariffConfig> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return DEFAULT_TARIFFS;
+
+  const { data, error } = await supabase
+    .from('user_configs')
+    .select('tariffs')
+    .eq('user_id', user.id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') { // PGRST116 é "nenhum resultado encontrado"
+    console.error('Erro ao buscar tarifas:', error);
+  }
+
+  if (data && data.tariffs) {
+    return data.tariffs as TariffConfig;
+  }
+
+  return DEFAULT_TARIFFS;
 };
 
-export const getTariffs = (): TariffConfig => {
-  const data = localStorage.getItem(KEYS.TARIFFS);
-  return data ? JSON.parse(data) : DEFAULT_TARIFFS;
-};
+export const saveTariffs = async (tariffs: TariffConfig): Promise<TariffConfig> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) throw new Error('Usuário não autenticado');
 
-export const saveTariffs = (tariffs: TariffConfig): TariffConfig => {
-  localStorage.setItem(KEYS.TARIFFS, JSON.stringify(tariffs));
+  const { error } = await supabase
+    .from('user_configs')
+    .upsert({ 
+      user_id: user.id, 
+      tariffs: tariffs,
+      updated_at: new Date().toISOString()
+    });
+
+  if (error) {
+    console.error('Erro ao salvar tarifas:', error);
+    throw error;
+  }
+
   return tariffs;
-}
+};
