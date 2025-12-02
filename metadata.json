@@ -1,0 +1,5 @@
+{
+  "name": "EnergiReal",
+  "description": "Gerenciador inteligente de consumo de energia elétrica com projeção de custos e análise detalhada de tarifas.",
+  "requestFramePermissions": []
+}
