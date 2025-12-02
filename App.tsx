@@ -5,7 +5,8 @@ import { Dashboard } from './components/Dashboard';
 import { ReadingForm } from './components/ReadingForm';
 import { TariffSettings } from './components/TariffSettings';
 import { History } from './components/History';
-import { LayoutDashboard, PlusCircle, Settings, History as HistoryIcon, Zap } from 'lucide-react';
+import { Login } from './components/Login';
+import { LayoutDashboard, PlusCircle, Settings, History as HistoryIcon, Zap, LogOut } from 'lucide-react';
 
 enum Tab {
   DASHBOARD = 'dashboard',
@@ -15,15 +16,33 @@ enum Tab {
 }
 
 const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.DASHBOARD);
   const [readings, setReadings] = useState<Reading[]>([]);
   const [tariffs, setTariffs] = useState<TariffConfig | null>(null);
 
   useEffect(() => {
+    // Check authentication
+    const auth = localStorage.getItem('energi_real_auth');
+    if (auth === 'true') {
+      setIsAuthenticated(true);
+    }
+
     // Initial Load
     setReadings(getReadings());
     setTariffs(getTariffs());
   }, []);
+
+  const handleLogin = () => {
+    localStorage.setItem('energi_real_auth', 'true');
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('energi_real_auth');
+    setIsAuthenticated(false);
+    setActiveTab(Tab.DASHBOARD);
+  };
 
   const handleSaveReading = (reading: Reading) => {
     const updated = saveReading(reading);
@@ -53,6 +72,10 @@ const App: React.FC = () => {
     return [...readings].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime()).pop();
   };
 
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   if (!tariffs) return <div className="flex h-screen items-center justify-center text-slate-500">Carregando...</div>;
 
   const renderContent = () => {
@@ -78,7 +101,7 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-2">
-              <div className="bg-indigo-600 p-2 rounded-lg">
+              <div className="bg-indigo-600 p-2 rounded-lg shadow-sm shadow-indigo-200">
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-blue-600">
@@ -114,13 +137,14 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Mobile Menu Button - Simplified for this demo as a simple toggle, but usually would involve a drawer */}
-            <div className="md:hidden flex items-center">
+            {/* Logout Button (Desktop & Mobile header) */}
+            <div className="flex items-center">
                 <button 
-                  onClick={() => setActiveTab(Tab.ADD)}
-                  className="bg-indigo-600 text-white p-2 rounded-full hover:bg-indigo-700 transition"
+                  onClick={handleLogout}
+                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all"
+                  title="Sair"
                 >
-                  <PlusCircle size={20} />
+                  <LogOut size={20} />
                 </button>
             </div>
           </div>
@@ -133,7 +157,7 @@ const App: React.FC = () => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-40 pb-safe">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 z-40 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
           <MobileNavButton 
             active={activeTab === Tab.DASHBOARD} 
             onClick={() => setActiveTab(Tab.DASHBOARD)} 
@@ -169,7 +193,7 @@ const NavButton = ({ active, onClick, icon, label }: { active: boolean, onClick:
     onClick={onClick}
     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
       active 
-        ? 'bg-indigo-50 text-indigo-700 shadow-sm' 
+        ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' 
         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
     }`}
   >
@@ -181,8 +205,8 @@ const NavButton = ({ active, onClick, icon, label }: { active: boolean, onClick:
 const MobileNavButton = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center p-1 rounded-lg transition-colors ${
-      active ? 'text-indigo-600' : 'text-slate-400'
+    className={`flex flex-col items-center justify-center p-1 rounded-lg transition-colors min-w-[60px] ${
+      active ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-400'
     }`}
   >
     {icon}
